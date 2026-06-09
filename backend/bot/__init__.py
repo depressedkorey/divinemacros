@@ -1,1 +1,0 @@
-# Bot compatibility blueprint package.
