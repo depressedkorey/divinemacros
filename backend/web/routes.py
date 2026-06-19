@@ -600,6 +600,10 @@ def _release_exe_asset_preferred_name() -> str:
     ).strip().lower()
 
 
+def _release_msi_asset_preferred_name() -> str:
+    return str(current_app.config.get('RELEASE_MSI_ASSET_NAME', '')).strip().lower()
+
+
 def _github_api_request(url: str, *, accept: str = 'application/vnd.github+json'):
     token = str(current_app.config.get('GITHUB_TOKEN', '')).strip()
     headers = {
@@ -749,6 +753,50 @@ def _latest_release_data(*, direct_exe_only: bool = False) -> dict | None:
 
     _release_cache[cache_key] = {'ts_ms': now, 'data': data}
     return data
+
+
+def _latest_msi_release_data() -> dict | None:
+    if not _github_release_ready():
+        return None
+
+    now = _unix_ms()
+    bucket = _release_cache.get('msi') or {'ts_ms': 0, 'data': None}
+    cached = bucket.get('data')
+    if cached and (now - int(bucket.get('ts_ms') or 0)) < 30_000:
+        return cached  # type: ignore[return-value]
+
+    preferred = _release_msi_asset_preferred_name()
+    repo = _release_repo()
+    try:
+        payloads = [_json_from_url(_github_api_request(
+            f'https://api.github.com/repos/{repo}/releases/latest'
+        ))]
+        recent = _json_from_url(_github_api_request(
+            f'https://api.github.com/repos/{repo}/releases?per_page=10'
+        ))
+        if isinstance(recent, list):
+            payloads.extend(recent)
+    except Exception:
+        return None
+
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+        assets = payload.get('assets') or []
+        candidates = [
+            asset for asset in assets
+            if str(asset.get('name') or '').strip().lower().endswith('.msi')
+        ]
+        asset = None
+        if preferred:
+            asset = next((item for item in candidates if str(item.get('name') or '').strip().lower() == preferred), None)
+        if asset is None and candidates:
+            asset = candidates[0]
+        data = _release_payload_to_data(payload, asset) if asset else None
+        if data:
+            _release_cache['msi'] = {'ts_ms': now, 'data': data}
+            return data
+    return None
 
 
 def _fetch_release_asset_bytes(asset_id: int, browser_download_url: str = '') -> bytes | None:
@@ -3077,6 +3125,60 @@ def dashboard_download_latest():
         'publishedAt': release['publishedAt'],
         'assetName': release['assetName'],
         'size': release['assetSize'],
+        'url': url,
+    }), 200
+
+
+@web_bp.route('/api/dashboard/download/<asset_kind>', methods=['GET'])
+def dashboard_download_asset(asset_kind: str):
+    user, err = _dashboard_user_or_401()
+    if err:
+        return err
+    active = _active_full_client_license(user)
+    if not active:
+        return jsonify({
+            'ok': False,
+            'error': 'subscription_required',
+            'message': 'An active Divine subscription is required to download the client.',
+        }), 403
+
+    kind = str(asset_kind or '').strip().lower()
+    if kind == 'setup':
+        release = _latest_release_data()
+    elif kind == 'exe':
+        release = _latest_release_data(direct_exe_only=True)
+    elif kind == 'msi':
+        release = _latest_msi_release_data()
+    else:
+        return jsonify({'ok': False, 'error': 'Unknown download format'}), 404
+
+    if not release:
+        return jsonify({'ok': False, 'error': f'{kind.upper()} release is not available yet'}), 503
+
+    token = _build_download_token(
+        int(release['assetId']),
+        str(release['assetName']),
+        extra={
+            'discord_id': str(user.get('id') or '')[:64],
+            'purpose': f'dashboard_{kind}',
+        },
+    )
+    url = f'{_public_api_root()}/api/client/download?token={quote(token, safe="")}'
+    audit_event(
+        'web.dashboard.download_asset',
+        ip=_client_ip(),
+        discord_id=str(user.get('id') or '')[:64],
+        plan=_license_plan(active),
+        asset_kind=kind,
+        asset_name=str(release['assetName'])[:96],
+    )
+    return jsonify({
+        'ok': True,
+        'kind': kind,
+        'version': release['version'],
+        'assetName': release['assetName'],
+        'size': release['assetSize'],
+        'expiresInSec': max(60, int(current_app.config.get('DOWNLOAD_URL_TTL_SECONDS', 900))),
         'url': url,
     }), 200
 
