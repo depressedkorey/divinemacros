@@ -530,6 +530,12 @@ def _github_release_ready() -> bool:
     )
 
 
+def _release_service_error() -> str:
+    if not str(current_app.config.get('GITHUB_TOKEN', '')).strip():
+        return 'Private downloads are not connected on the server yet. Add GITHUB_TOKEN in Render and redeploy.'
+    return 'The private release could not be reached. Verify the GitHub token can read depressedkorey/divine-releases.'
+
+
 def _resolve_standalone_asset_id(download_ref: str) -> tuple[int, str] | tuple[None, None]:
     """
     Given a download_ref URL like:
@@ -3113,7 +3119,7 @@ def dashboard_download_latest():
 
     release = _latest_release_data(direct_exe_only=True)
     if not release:
-        return jsonify({'ok': False, 'error': 'Latest release is not configured yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     path = _build_download_link(int(release['assetId']), str(release['assetName']))
     url = f'{_public_api_root()}{path}'
@@ -3153,7 +3159,7 @@ def dashboard_download_asset(asset_kind: str):
         return jsonify({'ok': False, 'error': 'Unknown download format'}), 404
 
     if not release:
-        return jsonify({'ok': False, 'error': f'{kind.upper()} release is not available yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     token = _build_download_token(
         int(release['assetId']),
@@ -3205,7 +3211,7 @@ def dashboard_installer_command():
 
     release = _latest_release_data()
     if not release:
-        return jsonify({'ok': False, 'error': 'Latest release is not configured yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     sha256_hex = _latest_release_sha256(release)
     if not sha256_hex:
@@ -3257,7 +3263,7 @@ def dashboard_launch_command():
 
     release = _latest_release_data(direct_exe_only=True)
     if not release:
-        return jsonify({'ok': False, 'error': 'Latest release is not configured yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     asset_name = str(release.get('assetName') or '').strip()
     if not _is_direct_client_asset_name(asset_name):
@@ -3322,7 +3328,7 @@ def bot_download_link():
 
     release = _latest_release_data()
     if not release:
-        return jsonify({'ok': False, 'error': 'Latest release is not configured yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     path = _build_download_link(int(release['assetId']), str(release['assetName']))
     url = f'{_public_api_root()}{path}'
@@ -3988,7 +3994,7 @@ def dashboard_build_exe():
     # Fetch the base release binary
     exe_bytes = _fetch_release_binary_full()
     if not exe_bytes:
-        return jsonify({'ok': False, 'error': 'Could not fetch release â€” try again shortly.'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
 
     # Patch version resource strings
     patch_strings: dict[str, str] = {
@@ -4038,7 +4044,7 @@ def dashboard_build_exe():
 def client_latest():
     release = _latest_release_data()
     if not release:
-        return jsonify({'ok': False, 'error': 'Latest release is not configured yet'}), 503
+        return jsonify({'ok': False, 'error': _release_service_error()}), 503
     return jsonify({
         'ok': True,
         'version': release['version'],

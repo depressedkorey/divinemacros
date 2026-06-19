@@ -193,11 +193,17 @@ class Config:
     EMAIL_FROM = _env_first('EMAIL_FROM', 'SMTP_FROM', 'SMTP_USER', default='')
 
     # Release distribution (private GitHub-backed brokered downloads)
-    GITHUB_RELEASE_REPO = _env_first('GITHUB_RELEASE_REPO', 'GITHUB_PRIVATE_REPO')
-    GITHUB_TOKEN = _env_first('GITHUB_TOKEN')
-    RELEASE_ASSET_NAME = _env_first('RELEASE_ASSET_NAME')
-    RELEASE_EXE_ASSET_NAME = _env_first('RELEASE_EXE_ASSET_NAME', 'RELEASE_DIRECT_EXE_ASSET_NAME')
-    RELEASE_MSI_ASSET_NAME = _env_first('RELEASE_MSI_ASSET_NAME')
+    GITHUB_RELEASE_REPO = _env_first(
+        'GITHUB_RELEASE_REPO', 'GITHUB_PRIVATE_REPO',
+        default='depressedkorey/divine-releases',
+    )
+    GITHUB_TOKEN = _env_first('GITHUB_TOKEN', 'GH_TOKEN')
+    RELEASE_ASSET_NAME = _env_first('RELEASE_ASSET_NAME', default='Divine.Macros.Setup.exe')
+    RELEASE_EXE_ASSET_NAME = _env_first(
+        'RELEASE_EXE_ASSET_NAME', 'RELEASE_DIRECT_EXE_ASSET_NAME',
+        default='Divine.Macros.exe',
+    )
+    RELEASE_MSI_ASSET_NAME = _env_first('RELEASE_MSI_ASSET_NAME', default='Divine.Macros.msi')
     DOWNLOAD_URL_TTL_SECONDS = _env_int('DOWNLOAD_URL_TTL_SECONDS', 900, 60, 86_400)
     COMMUNITY_PUBLIC_BASE = _env_first('COMMUNITY_PUBLIC_BASE', 'DIVN_COMMUNITY_PUBLIC_BASE')
     AUTH_RESPONSE_SIGNING_KEY = _env_first('AUTH_RESPONSE_SIGNING_KEY', 'DIVINE_AUTH_RESPONSE_SIGNING_KEY')
